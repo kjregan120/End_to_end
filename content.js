@@ -1,6 +1,10 @@
 (function () {
   // Banner so you KNOW we loaded
-  console.log("%c[ResortScraper] content.js loaded on", "background:#222;color:#0f0;padding:2px 6px;border-radius:4px", location.href);
+  console.log(
+    "%c[ResortScraper] content.js loaded on",
+    "background:#222;color:#0f0;padding:2px 6px;border-radius:4px",
+    location.href
+  );
 
   const url = location.href;
   const resortMatch = url.match(/\/resorts\/([^\/]+)\/.*?rates-rooms\/?/i);
@@ -8,11 +12,12 @@
 
   const ISO = "\\d{4}-\\d{2}-\\d{2}";
   const US  = "\\d{2}\\/\\d{2}\\/\\d{4}";
-  const RE_IN_OUT  = new RegExp(`check_in_date=(${ISO}|${US}).*?check_out_date=(${ISO}|${US})`, "gi");
-  const RE_OUT_IN  = new RegExp(`check_out_date=(${ISO}|${US}).*?check_in_date=(${ISO}|${US})`, "gi");
+  const RE_IN_OUT   = new RegExp(`check_in_date=(${ISO}|${US}).*?check_out_date=(${ISO}|${US})`, "gi");
+  const RE_OUT_IN   = new RegExp(`check_out_date=(${ISO}|${US}).*?check_in_date=(${ISO}|${US})`, "gi");
   const RE_SINGLE_IN  = new RegExp(`check_in_date=(${ISO}|${US})`, "i");
   const RE_SINGLE_OUT = new RegExp(`check_out_date=(${ISO}|${US})`, "i");
-  const RE_ANY_DATE   = new RegExp(`(${ISO}|${US})`, "g");
+  // ❌ was /g — causes flaky .test() due to lastIndex
+  const RE_ANY_DATE  = new RegExp(`(${ISO}|${US})`);
 
   const normalize = (d) => {
     if (!d) return null;
@@ -23,8 +28,10 @@
 
   function extractFromString(str, source, results) {
     if (!str) return;
-    for (const m of str.matchAll(RE_IN_OUT))  results.push({ source, checkIn: normalize(m[1]), checkOut: normalize(m[2]) });
-    for (const m of str.matchAll(RE_OUT_IN))  results.push({ source, checkIn: normalize(m[2]), checkOut: normalize(m[1]) });
+
+    // Using matchAll with global regex is fine
+    for (const m of str.matchAll(RE_IN_OUT)) results.push({ source, checkIn: normalize(m[1]), checkOut: normalize(m[2]) });
+    for (const m of str.matchAll(RE_OUT_IN)) results.push({ source, checkIn: normalize(m[2]), checkOut: normalize(m[1]) });
 
     // If not paired, capture singles too
     const inOnly  = str.match(RE_SINGLE_IN);
@@ -55,7 +62,7 @@
     // 1) Visible text (light DOM only – fast)
     extractFromString(document.body?.innerText || "", "text", results);
 
-    // 2) Targeted selector you showed (if present)
+    // 2) Targeted selector (if present)
     document.querySelectorAll(".quick-quote-info-text").forEach(el => {
       extractFromString(el.innerText || "", ".quick-quote-info-text", results);
     });
@@ -77,13 +84,14 @@
     }
 
     // Choose the best pair
-    let best = results.find(r => r.checkIn && r.checkOut)
-            || (() => {
-                 const inHit  = results.find(r => r.checkIn);
-                 const outHit = results.find(r => r.checkOut);
-                 return inHit || outHit ? { checkIn: inHit?.checkIn || null, checkOut: outHit?.checkOut || null, source: "combined singles" } : null;
-               })()
-            || { checkIn: null, checkOut: null };
+    let best =
+      results.find(r => r.checkIn && r.checkOut)
+      || (() => {
+           const inHit  = results.find(r => r.checkIn);
+           const outHit = results.find(r => r.checkOut);
+           return inHit || outHit ? { checkIn: inHit?.checkIn || null, checkOut: outHit?.checkOut || null, source: "combined singles" } : null;
+         })()
+      || { checkIn: null, checkOut: null };
 
     const payload = {
       url,
@@ -94,7 +102,10 @@
       lastUpdated: Date.now()
     };
 
-    chrome.storage.local.set({ resortData: payload }).catch(() => {});
+    // Use callback to avoid relying on Promise support
+    try {
+      chrome.storage.local.set({ resortData: payload }, () => {});
+    } catch {}
     console.log("[ResortScraper] payload:", payload, { resultsPreview: results.slice(0, 5) });
     return payload;
   }
@@ -119,14 +130,16 @@
   const first = scanOnce();
   if (!(first && first.checkIn && first.checkOut)) {
     observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true });
-    [700, 1500, 3000].forEach(ms => setTimeout(() => observer.takeRecords() || scanOnce(), ms));
+    // ❌ was: observer.takeRecords() || scanOnce()
+    [700, 1500, 3000].forEach(ms =>
+      setTimeout(() => { observer.takeRecords(); scanOnce(); }, ms)
+    );
   }
-}
+
   // === Injected augmentation: API fetch trigger + DOM replacement ===
   (function() {
     const NORM = s => (s || "").replace(/[–—\-]/g, "-").replace(/\s+/g, " ").trim().toLowerCase();
     const fmtDollarsNoDecimals = (cents) => {
-      // cents -> dollars, no decimals, with thousands separator
       const dollars = Math.round(Number(cents || 0) / 100);
       return dollars.toLocaleString(undefined, { maximumFractionDigits: 0 });
     };
@@ -143,7 +156,10 @@
           const key = `${payload.resort}|${payload.checkIn}|${payload.checkOut}`;
           if (key !== lastSentKey) {
             lastSentKey = key;
-            chrome.runtime.sendMessage({ type: "SCRAPE_UPDATED", payload }).catch(()=>{});
+            try {
+              // Avoid relying on Promise return
+              chrome.runtime.sendMessage({ type: "SCRAPE_UPDATED", payload }, () => {});
+            } catch {}
           }
         });
       } catch {}
@@ -152,8 +168,7 @@
     // Replace labels in DOM with "LABEL Or $TOTAL by renting"
     function applyPriceOverlays(data) {
       if (!data) return;
-      // Try to read per_product in a defensive way
-      const rows = (data && (data.per_product || data.products || data.rows || data["per-product"])) || data.per_product;
+      const rows = (data && (data.per_product || data.products || data.rows || data["per-product"])) || data?.per_product;
       if (!Array.isArray(rows)) return;
 
       const roots = [document];
@@ -165,7 +180,6 @@
         }
       } catch {}
 
-      // Scan text nodes where text == label (normalized) and replace textContent
       for (const { label, total } of rows) {
         if (!label) continue;
         const normLabel = NORM(label);
@@ -178,7 +192,6 @@
               if (!p) return NodeFilter.FILTER_REJECT;
               const tn = p.tagName;
               if (tn === "SCRIPT" || tn === "STYLE" || tn === "NOSCRIPT") return NodeFilter.FILTER_REJECT;
-              // Skip nodes where we've already applied
               if (p.dataset && p.dataset.rentalOverlayApplied === "1") return NodeFilter.FILTER_REJECT;
               const t = NORM(node.textContent);
               if (!t) return NodeFilter.FILTER_REJECT;
@@ -197,7 +210,7 @@
     }
 
     // Handle messages from background / popup
-    chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    chrome.runtime.onMessage.addListener((msg) => {
       if (!msg || typeof msg !== "object") return;
       if (msg.type === "API_DATA_UPDATED" && msg.data) {
         lastApiData = msg.data;
@@ -239,6 +252,7 @@
 
     // Kick off immediately on load
     requestFetchIfReady();
+
     // Also try to pull any cached data and apply (in case API already ran)
     try {
       chrome.storage.local.get(["lastApiData"], (res) => {
@@ -249,5 +263,4 @@
       });
     } catch {}
   })();
-
-})()
+})();
