@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Resort Data</title>
+    <style>
+      body { font: 14px/1.4 system-ui, sans-serif; padding: 12px; width: 320px; }
+      .label { color: #555; }
+      .val { font-weight: 600; }
+      .row { margin-bottom: 6px; }
+      code { background: #f3f3f3; padding: 2px 4px; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <div class="row"><span class="label">Resort:</span> <span id="resort" class="val">—</span></div>
+    <div class="row"><span class="label">Check-in:</span> <span id="in" class="val">—</span></div>
+    <div class="row"><span class="label">Check-out:</span> <span id="out" class="val">—</span></div>
+    <div class="row"><span class="label">URL:</span> <span id="url" class="val">—</span></div>
+    <div class="row"><span class="label">Found pairs:</span> <span id="count" class="val">0</span></div>
+    <div class="row"><small>Last updated: <span id="ts">—</span></small>
+    <hr/>
+    <h3>API Result</h3>
+    <div id="api-meta" style="font-size:12px;color:#666;"></div>
+    <ul id="api-rows" style="padding-left:16px;"></ul>
+    <div id="api-total" style="margin-top:8px;font-weight:bold;"></div>
+    <button id="btn-reapply" style="margin-top:12px;">Reapply replacements</button>
+  
+    <script src="popup.js"></script>
+  </body>
+</html>

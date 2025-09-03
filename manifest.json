@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "Resort Date Scraper",
+  "version": "1.1.0",
+  "description": "Grabs resort slug and check-in/out dates from Disney resort pages.",
+  "permissions": [
+    "activeTab",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://autumn-night-8572.kjregan120.workers.dev/*",
+    "https://disneyworld.disney.go.com/resorts/*/rates-rooms/",
+    "https://disneyworld.disney.go.com/resorts/*/rates-rooms/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://disneyworld.disney.go.com/resorts/*/rates-rooms/*",
+        "https://disneyworld.disney.go.com/resorts/*/rates-rooms/"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "all_frames": true,
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Show captured data",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  }
+}
